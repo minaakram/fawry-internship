@@ -1,0 +1,84 @@
+
+Task 2 - Troubleshooting Internal Web Dashboard (internal.example.com)
+
+1. DNS Resolution Verification
+I verified DNS resolution using two methods:
+- Checking /etc/resolv.conf:
+  - Configured to use 127.0.0.53 (systemd-resolved local resolver).
+- Testing resolution against 8.8.8.8 (Google DNS):
+  - Command used: nslookup internal.example.com 8.8.8.8
+  - Result: NXDOMAIN, meaning 8.8.8.8 could not resolve the domain.
+- Testing resolution using system default:
+  - Command: nslookup internal.example.com
+  - Result:
+    Name: internal.example.com
+    Address: 192.168.1.100
+
+Conclusion:
+The local DNS resolver could resolve internal.example.com to 192.168.1.100, but 8.8.8.8 could not. This confirms internal.example.com is only resolvable internally.
+
+2. Diagnose Service Reachability
+- curl -I http://localhost
+  HTTP/1.1 200 OK (nginx server running locally).
+- curl -I http://internal.example.com
+  Initially failed: "Connection refused".
+
+- hostname -I showed machine IP: 192.168.152.134
+- internal.example.com resolved to: 192.168.1.100
+
+Conclusion:
+I was connecting to a different device on the network, not my own machine.
+
+3. Tracing the Issue - Possible Causes
+1. No web server running on 192.168.1.100.
+2. Web server running but bound only to localhost (127.0.0.1) instead of 0.0.0.0.
+3. Firewall blocking port 80.
+4. Network misrouting or the target machine being offline.
+5. DNS misconfiguration.
+
+4. Proposed and Applied Fixes
+- Confirm web server is running:
+  sudo systemctl status nginx
+- Confirm Nginx is listening on 0.0.0.0:
+  sudo nano /etc/nginx/sites-enabled/default
+  Confirm:
+    listen 80 default_server;
+    listen [::]:80 default_server;
+- Reload Nginx after changes:
+  sudo systemctl reload nginx
+
+Issue in my case:
+The server I was trying to reach was on 192.168.1.100, and I do not have access to that device.
+
+To continue testing, I modified /etc/hosts locally.
+
+Bonus Section
+Configuring /etc/hosts
+- Added entry:
+  127.0.0.1    internal.example.com
+- Verified with:
+  curl -I http://internal.example.com
+- Output confirmed: HTTP/1.1 200 OK
+
+Persisting DNS Settings
+- systemd-resolved:
+  - Edit /etc/systemd/resolved.conf:
+    [Resolve]
+    DNS=8.8.8.8
+    FallbackDNS=1.1.1.1
+  - Restart systemd-resolved:
+    sudo systemctl restart systemd-resolved
+
+- NetworkManager:
+  - nmcli dev show
+  - sudo nmcli con mod <your-connection-name> ipv4.dns "8.8.8.8 1.1.1.1"
+  - sudo nmcli con up <your-connection-name>
+
+Issues Encountered During Task
+- Initially, connection to internal.example.com was refused.
+- Confirmed that my machine IP was different from 192.168.1.100.
+- Modified /etc/hosts to map internal.example.com to 127.0.0.1 locally.
+- After modification, service became reachable.
+
+Conclusion
+All required steps have been completed successfully, including troubleshooting DNS resolution, diagnosing service availability, applying fixes, and implementing the bonus tasks.
